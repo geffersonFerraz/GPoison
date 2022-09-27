@@ -1,6 +1,4 @@
 import asyncio
-from re import sub
-from shelve import Shelf
 import subprocess
 import os
 
