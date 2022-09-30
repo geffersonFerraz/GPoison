@@ -16,3 +16,10 @@ poisonTarget = ['35.0.0.0',
 
 Be happy!
 thnks @panngo
+
+
+para gerar binario: 
+
+```
+pyinstaller GPMGLU.py --onefile
+```
