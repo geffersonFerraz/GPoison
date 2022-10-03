@@ -4,6 +4,7 @@ from shelve import Shelf
 import subprocess
 import os
 import sys
+from turtle import home
 import requests
 
 
@@ -35,7 +36,7 @@ async def getRoutes():
             'sudo route -n -e | grep gpd0', shell=True).decode('utf-8')
         return routes.splitlines()
     except:
-        print('VPN ainda não conectada...')
+        print('Aguardando conexão da VPN.')
 
 
 async def sudoTest():
@@ -55,7 +56,7 @@ async def seedAndDestroy():
             await subprocess.run('sudo kill $(pidof PanGPUI) > /dev/null 2>&1', shell=True)
             print('Processo PanGPUI finalizado. Continuando...')
         except:
-            print('Falha ao finalizar Processo PanGPUI. Continuando...')
+            err = 0
     except:
         print('Processo não encontrado. Continuando...')
 
@@ -69,33 +70,53 @@ async def sendNameWhoRun():
         err = 1
 
 
-async def poisoner(poisonIPs):
-    await sudoTest()
-    await seedAndDestroy()
-    await sendNameWhoRun()
+async def validatePangGPA():
     try:
-        print('Iniciando GlobalProtect. Aguardando conexão...')
-        # await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
+        resultGpa = subprocess.check_output(
+            'pidof PanGPA', shell=True).decode('utf-8')
+        if resultGpa == '':
+            raise Exception('Iniciando PanGPA...')
+    except:
+        await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
+
+
+async def validatePangGPA():
+    try:
+        resultGpa = subprocess.check_output(
+            'pidof PanGPA', shell=True).decode('utf-8')
+        if resultGpa == '':
+            raise Exception('Iniciando PanGPA...')
+    except:
+        await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
+
+
+async def runPanGPUI():
+    await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
+    try:
         await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPUI start from-cli > /dev/null 2>&1', shell=True, user=os.getlogin())
     except:
         err = 1
 
-    routesLines = []
-    while (not routesLines or len(routesLines) == 0):
-        await asyncio.sleep(10)
-        routesLines = await getRoutes()
 
-    routesLines = await getRoutes()
-    gateway = ''
-    if routesLines and len(routesLines) > 0:
-        for line in routesLines:
-            if '0.0.0.0' in line:
-                line = line.removeprefix('0.0.0.0         ')
-                lineSlited = line.split()
-                gateway = lineSlited[0]
-                await removeDefault(gateway)
+async def getIpList():
+    homeDir = os.path.expanduser('~')
+    fullFile = "{dir}/GPoisonIPList.txt".format(dir=homeDir)
 
-    for ip in poisonIPs:
+    try:
+        with open(fullFile, "r") as f:
+            IPs = f.readlines()
+    except:
+        open(fullFile, "w+")
+
+    ipList = []
+    for ip in IPs:
+        ipList.append(str(ip).replace('\n', ''))
+
+    return ipList
+
+
+async def createNewRoutes(poisonIP):
+    for ip in poisonIP:
         mask = ''
         ipSplit = ip.split('.')
         for part in ipSplit:
@@ -112,6 +133,28 @@ async def poisoner(poisonIPs):
         except:
             err = 1  # do nothing...
 
+
+async def checkVPNConnected():
+    routesLines = []
+    while (not routesLines or len(routesLines) == 0):
+        await asyncio.sleep(10)
+        routesLines = await getRoutes()
+    return routesLines
+
+
+async def removeDefaultRoutes():
+    routesLines = await getRoutes()
+    gateway = ''
+    if routesLines and len(routesLines) > 0:
+        for line in routesLines:
+            if '0.0.0.0' in line:
+                line = line.removeprefix('0.0.0.0         ')
+                lineSlited = line.split()
+                gateway = lineSlited[0]
+                await removeDefault(gateway)
+
+
+async def printVPNREADY():
     print(''' 
  /$$    /$$ /$$$$$$$  /$$   /$$       /$$$$$$$  /$$$$$$$$  /$$$$$$  /$$$$$$$  /$$     /$$
 | $$   | $$| $$__  $$| $$$ | $$      | $$__  $$| $$_____/ /$$__  $$| $$__  $$|  $$   /$$/
@@ -124,9 +167,26 @@ async def poisoner(poisonIPs):
 ''')
 
 
+async def poisoner(poisonIPs):
+    # await sudoTest()
+    print('Validando processos do GlobalProtect')
+    poisonIP = await getIpList()
+
+    # await validatePanGPA()
+    # await seedAndDestroy()
+    # await sendNameWhoRun()
+    # await runPanGPUI()
+    # await checkVPNConnected()
+    # await removeDefaultRoutes()
+    # await createNewRoutes(poisonIP)
+    # printVPNREADY()
+
+
 poisonTarget = ['35.0.0.0',
                 '10.0.0.0',
                 '34.0.0.0',
+                '10.8.4.133',
+                '10.46.0.30'
                 '34.73.137.238',
                 '35.0.0.0',
                 '52.0.0.0',
