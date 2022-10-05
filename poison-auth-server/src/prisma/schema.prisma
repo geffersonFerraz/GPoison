@@ -1,0 +1,39 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  createdAt DateTime  @default(now())
+  updateAt  DateTime  @updatedAt
+  Serial    Serial[]
+  License   License[]
+}
+
+model Serial {
+  id        Int      @id @default(autoincrement())
+  serial    String   @unique
+  serial2   String?  @unique
+  clientId  Int
+  client    Client   @relation(fields: [clientId], references: [id], onUpdate: Restrict, map: "serial_client_ibfk_1")
+  createdAt DateTime @default(now())
+  updateAt  DateTime @updatedAt
+}
+
+model License {
+  id        Int      @id @default(autoincrement())
+  finishAt  DateTime
+  clientId  Int
+  client    Client   @relation(fields: [clientId], references: [id], onUpdate: Restrict, map: "license_client_ibfk_1")
+  createdAt DateTime @default(now())
+  updateAt  DateTime @updatedAt
+}
