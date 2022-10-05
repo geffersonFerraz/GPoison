@@ -1,0 +1,21 @@
+version: "3.7"
+services:
+  mysql:
+    image: mysql:5.7
+    container_name: 'mysql_gpoison'
+    environment:
+      - MYSQL_ROOT_PASSWORD=gpoison
+      - MYSQL_DATABASE=gpoison
+      - MYSQL_USER=gpoison
+      - MYSQL_PASSWORD=gpoison
+    expose:
+      - '3209'
+    ports:
+      - '3209:3306'
+    networks:
+      - gpoison
+  
+  
+networks:
+  gpoison:
+    driver: bridge

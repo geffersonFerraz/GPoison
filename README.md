@@ -21,5 +21,7 @@ thnks @panngo
 para gerar binario: 
 
 ```
-pyinstaller GPMGLU.py --onefile
+
+ pyinstaller --onefile --add-data "/home/gefferson/git-hub/GPoison/icon.png:./icon.png" --icon "/home/gefferson/git-hub/GPoison/icon.ico" GPoison.py
+
 ```
