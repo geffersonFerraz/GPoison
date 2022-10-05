@@ -1,42 +1,69 @@
 import asyncio
+from fileinput import filename
 from re import sub
 from shelve import Shelf
 import subprocess
 import os
 import sys
-from turtle import home
+from pytz import utc
 import requests
+import json
+import uuid
+import pystray
+import PIL.Image
+import re
+from datetime import date, datetime
+import dateutil.parser
+
+image = PIL.Image.open("icon.png")
+
+##
+# pyinstaller --onefile --add-data "/home/gefferson/git-hub/GPoison/icon.png:./icon.png" --icon "/home/gefferson/git-hub/GPoison/icon.ico" GPoison.py
+##
 
 
-async def removeDefault(gateway):
-    # REMOVE ROTAS DEFAULT
-    try:
-        await subprocess.run(
-            'sudo route del -net 0.0.0.0        gw {gateway} netmask 0.0.0.0       dev gpd0  > /dev/null 2>&1'.format(gateway=gateway), shell=True)
-    except:
-        err = 1  # do nothing...
-    try:
-        await subprocess.run(
-            'sudo route del -net 10.0.0.150        gw {gateway} netmask 255.255.255.255       dev gpd0  > /dev/null 2>&1'.format(gateway=gateway), shell=True)
-    except:
-        err = 1  # do nothing...
+def getGatewayGPD0():
+    result = subprocess.check_output(
+        "ip route | grep gpd0 | awk '{print $3}'", shell=True).decode('utf-8')
+    result = result.split('\n')
+    if len(result) >= 1:
+        result = result[0]
+        return result
+    else:
+        sendMessage('VPN ainda não conectada!')
+        return None
 
-    try:
-        await subprocess.run(
-            'sudo route del -net 10.0.0.151        gw {gateway} netmask 255.255.255.255       dev gpd0  > /dev/null 2>&1'.format(gateway=gateway), shell=True)
-    except:
-        err = 1  # do nothing...
-    print('Rotas default eliminadas. Continuando...')
+
+async def removeDefault():
+    gatewayGpd0 = getGatewayGPD0()
+    if gatewayGpd0 != None:
+        try:
+            await subprocess.run(
+                'sudo route del -net 0.0.0.0        gw {gateway} netmask 0.0.0.0       dev gpd0  > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+        except:
+            err = 1  # do nothing...
+        try:
+            await subprocess.run(
+                'sudo route del -net 10.0.0.150        gw {gateway} netmask 255.255.255.255       dev gpd0  > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+        except:
+            err = 1  # do nothing...
+
+        try:
+            await subprocess.run(
+                'sudo route del -net 10.0.0.151        gw {gateway} netmask 255.255.255.255       dev gpd0  > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+        except:
+            err = 1  # do nothing...
+        print('Rotas default eliminadas. Continuando...')
 
 
 async def getRoutes():
     # COLETA ROTAS GPD0 EXISTENTES
     try:
         routes = subprocess.check_output(
-            'sudo route -n -e | grep gpd0', shell=True).decode('utf-8')
+            'route -n -e | grep gpd0', shell=True).decode('utf-8')
         return routes.splitlines()
     except:
-        print('Aguardando conexão da VPN.')
+        sendMessage('Aguardando conexão da VPN.')
 
 
 async def sudoTest():
@@ -45,7 +72,7 @@ async def sudoTest():
         if not 'SUDO_UID' in os.environ.keys():
             raise Exception('Execute com SUDO!')
     except:
-        print('Execute o script com SUDO')
+        sendMessage('Execute a aplicação com SUDO')
         sys.exit(0)
 
 
@@ -53,7 +80,7 @@ async def seedAndDestroy():
     # LOCALIZA E FINALIZA PROCESSO DO GP
     try:
         try:
-            await subprocess.run('sudo kill $(pidof PanGPUI) > /dev/null 2>&1', shell=True)
+            await subprocess.Popen('kill $(pidof PanGPUI) > /dev/null 2>&1', shell=True)
             print('Processo PanGPUI finalizado. Continuando...')
         except:
             err = 0
@@ -61,47 +88,88 @@ async def seedAndDestroy():
         print('Processo não encontrado. Continuando...')
 
 
+def justNumbers(string1, string2):
+    numsStr1 = re.sub('[^0-9]', '', string1)
+    numsStr2 = re.sub('[^0-9]', '', string2)
+    return int(numsStr1) + int(numsStr2)
+
+
+def calcSerial(jusNumber):
+    Str1 = str(jusNumber)
+    firstChar = Str1[0]
+    today = date.today()
+    dayIs = '{month}{day}'.format(
+        month=int(today.strftime("%m")), day=int(today.strftime("%d")))
+    result = Str1.replace(firstChar, dayIs)
+    return int(result)
+
+
 async def sendNameWhoRun():
+    urlServer = "http://localhost:3000/client"
+    localSerial = getMachine_addr()
+
+    # mock1 = '5HRQ973BRCMJ0009O0279'
+    # mock2 = '0x135f5d85b7ed'
+    # payload = json.dumps({"serial": mock1, "serial2": mock2})
+    payload = json.dumps({"serial": localSerial[0], "serial2": localSerial[1]})
+    headers = {'Content-Type': 'application/json'}
+    resultIs = ''
     try:
-        msg = os.getlogin()
-        x = await requests.post(
-            'https://api.telegram.org/bot5702731597:AAEdxNyojGJI4K7aFr6q8-Ns1wihF0gCvOU/sendMessage?chat_id=-1001851963351&text=Usuario: {msg}'.format(msg=msg))
+        response = requests.request(
+            "GET", urlServer, headers=headers, data=payload)
+        resultIs = json.loads(response.content.decode('utf-8'))['result']
+        expireAt = json.loads(response.content.decode('utf-8'))['expireAt']
     except:
-        err = 1
+        err = 2
+
+    if resultIs == '':
+        sendMessage(
+            'Falha ao conectar ao servidor de licença. Procure ajuda...')
+        # sys.exit(0)
+    if resultIs > 0:
+        myNum = justNumbers(localSerial[0], localSerial[1])
+        mySer = calcSerial(myNum)
+        if resultIs == mySer:
+            xpto = dateutil.parser.isoparse(
+                expireAt).strftime("%d/%m/%Y, %H:%M:%S")
+            sendMessage('Licença expira em: {data}'.format(data=xpto))
+            return xpto
+    sendMessage('Cliente não autorizado a executar. Procure ajuda...')
+    return None
 
 
-async def validatePangGPA():
+async def validatePanGPA():
     try:
         resultGpa = subprocess.check_output(
             'pidof PanGPA', shell=True).decode('utf-8')
         if resultGpa == '':
             raise Exception('Iniciando PanGPA...')
     except:
-        await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
-
-
-async def validatePangGPA():
-    try:
-        resultGpa = subprocess.check_output(
-            'pidof PanGPA', shell=True).decode('utf-8')
-        if resultGpa == '':
-            raise Exception('Iniciando PanGPA...')
-    except:
-        await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
+        await subprocess.run('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
 
 
 async def runPanGPUI():
-    await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPA start > /dev/null 2>&1', shell=True, user=os.getlogin())
     try:
-        await subprocess.Popen('/opt/paloaltonetworks/globalprotect/PanGPUI start from-cli > /dev/null 2>&1', shell=True, user=os.getlogin())
+        await subprocess.Popen(['/opt/paloaltonetworks/globalprotect/PanGPUI', 'start', 'from-cli'], shell=True, user=os.getlogin())
     except:
         err = 1
 
 
-async def getIpList():
+def getIPListFileName():
     homeDir = os.path.expanduser('~')
     fullFile = "{dir}/GPoisonIPList.txt".format(dir=homeDir)
+    return fullFile
 
+
+def sendMessage(message):
+    print(message)
+    subprocess.Popen(['notify-send', message])
+
+
+async def getIpList():
+    fullFile = getIPListFileName()
+
+    IPs = []
     try:
         with open(fullFile, "r") as f:
             IPs = f.readlines()
@@ -115,7 +183,24 @@ async def getIpList():
     return ipList
 
 
+def getMachine_addr():
+    mac = hex(uuid.getnode()).replace("\n", "").replace(
+        "  ", "").replace(" ", "").replace('/', '').replace('\\', '')
+    os_type = sys.platform.lower()
+
+    if "darwin" in os_type:
+        command = "ioreg -l | grep IOPlatformSerialNumber"
+    elif "win" in os_type:
+        command = "wmic bios get serialnumber"
+    elif "linux" in os_type:
+        command = "dmidecode -s baseboard-serial-number"
+    serial = os.popen(command).read().replace("\n", "").replace(
+        "  ", "").replace(" ", "").replace('/', '').replace('\\', '')
+    return [serial, mac]
+
+
 async def createNewRoutes(poisonIP):
+    gatewayGpd0 = getGatewayGPD0()
     for ip in poisonIP:
         mask = ''
         ipSplit = ip.split('.')
@@ -129,9 +214,30 @@ async def createNewRoutes(poisonIP):
                     mask = '{masks}.0'.format(masks=mask)
         try:
             subprocess.run(
-                'route add -net {ip}    gw {gateway} netmask {netmask}   dev gpd0 metric 600 > /dev/null 2>&1'.format(gateway=gateway, ip=ip, netmask=mask), shell=True)
+                'sudo route add -net {ip}    gw {gateway} netmask {netmask}   dev gpd0 metric 600 > /dev/null 2>&1'.format(gateway=gatewayGpd0, ip=ip, netmask=mask), shell=True)
         except:
             err = 1  # do nothing...
+
+
+async def createDefaultRoutes():
+    gatewayGpd0 = getGatewayGPD0()
+    sendMessage('Aguarde...')
+    try:
+        subprocess.run(
+            'sudo route add -net 0.0.0.0 gw {gateway} netmask 0.0.0.0   dev gpd0 metric 0 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+    except:
+        err = 1  # do nothing...
+    try:
+        subprocess.run(
+            'sudo route add -net 10.0.0.151    gw {gateway} netmask 255.255.255.255 dev gpd0 metric 0 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+    except:
+        err = 1  # do nothing...
+    try:
+        subprocess.run(
+            'sudo route add -net 10.0.0.150    gw {gateway} netmask 255.255.255.255 dev gpd0 metric 0 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+    except:
+        err = 1  # do nothing...
+    sendMessage('VPN full =(')
 
 
 async def checkVPNConnected():
@@ -142,68 +248,72 @@ async def checkVPNConnected():
     return routesLines
 
 
-async def removeDefaultRoutes():
-    routesLines = await getRoutes()
-    gateway = ''
-    if routesLines and len(routesLines) > 0:
-        for line in routesLines:
-            if '0.0.0.0' in line:
-                line = line.removeprefix('0.0.0.0         ')
-                lineSlited = line.split()
-                gateway = lineSlited[0]
-                await removeDefault(gateway)
+async def poisonerSub():
+    sendMessage('Aguarde...')
+
+    result = await sendNameWhoRun()
+    if result != None:
+        poisonIP = await getIpList()
+
+        if len(poisonIP) == 0:
+            sendMessage('Lista de IPs vazia. Preencha em "Lista de IPs"')
+        else:
+            await checkVPNConnected()
+            await createNewRoutes(poisonIP)
+            await removeDefault()
+        sendMessage('VPN Splitada =)')
 
 
-async def printVPNREADY():
-    print(''' 
- /$$    /$$ /$$$$$$$  /$$   /$$       /$$$$$$$  /$$$$$$$$  /$$$$$$  /$$$$$$$  /$$     /$$
-| $$   | $$| $$__  $$| $$$ | $$      | $$__  $$| $$_____/ /$$__  $$| $$__  $$|  $$   /$$/
-| $$   | $$| $$  \ $$| $$$$| $$      | $$  \ $$| $$      | $$  \ $$| $$  \ $$ \  $$ /$$/ 
-|  $$ / $$/| $$$$$$$/| $$ $$ $$      | $$$$$$$/| $$$$$   | $$$$$$$$| $$  | $$  \  $$$$/  
- \  $$ $$/ | $$____/ | $$  $$$$      | $$__  $$| $$__/   | $$__  $$| $$  | $$   \  $$/   
-  \  $$$/  | $$      | $$\  $$$      | $$  \ $$| $$      | $$  | $$| $$  | $$    | $$    
-   \  $/   | $$      | $$ \  $$      | $$  | $$| $$$$$$$$| $$  | $$| $$$$$$$/    | $$    
-    \_/    |__/      |__/  \__/      |__/  |__/|________/|__/  |__/|_______/     |__/                                                                                                 
-''')
-
-
-async def poisoner(poisonIPs):
-    # await sudoTest()
+async def poisoner():
+    await sudoTest()
     print('Validando processos do GlobalProtect')
     poisonIP = await getIpList()
 
-    # await validatePanGPA()
-    # await seedAndDestroy()
-    # await sendNameWhoRun()
-    # await runPanGPUI()
-    # await checkVPNConnected()
-    # await removeDefaultRoutes()
-    # await createNewRoutes(poisonIP)
-    # printVPNREADY()
+    if len(poisonIP) == 0:
+        sendMessage('Lista de IPs vazia. Preencha em "Lista de IPs"')
+    else:
+        await validatePanGPA()
+        await seedAndDestroy()
+        await runPanGPUI()
+        await poisonerSub()
 
 
-poisonTarget = ['35.0.0.0',
-                '10.0.0.0',
-                '34.0.0.0',
-                '10.8.4.133',
-                '10.46.0.30'
-                '34.73.137.238',
-                '35.0.0.0',
-                '52.0.0.0',
-                '54.221.97.120',
-                '130.0.0.0',
-                '148.59.72.0',
-                '179.190.0.0',
-                '179.191.0.0',
-                '179.191.169.0',
-                '200.170.150.0',
-                '201.48.47.68',
-                '201.95.254.0'
-                ]
+def on_run_vpn(icon, item):
+    asyncio.run(poisoner())
 
 
-async def main():
-    await poisoner(poisonTarget)
+def on_exit(icon, item):
+    sys.exit(0)
 
-if __name__ == '__main__':
-    asyncio.run(main())
+
+def on_editIpList(icon, item):
+    asyncio.run(getIpList())
+    fileName = getIPListFileName()
+
+    subprocess.run('sudo gedit {file}'.format(file=fileName), shell=True)
+
+
+def on_vpn_full(icon, item):
+    asyncio.run(createDefaultRoutes())
+
+
+def on_vpn_split(icon, item):
+    asyncio.run(poisonerSub())
+
+
+def on_client_info(icon, item):
+    result = getMachine_addr()
+    sendMessage('S1:{S1} - S2:{S2}'.format(S1=result[0], S2=result[1]))
+
+
+icon = pystray.Icon("GPoison", image, menu=pystray.Menu(
+    pystray.MenuItem("Iniciar GlobalProtect", on_run_vpn),
+    pystray.MenuItem("Split VPN", on_vpn_split),
+    pystray.MenuItem("VPN Full", on_vpn_full),
+    pystray.MenuItem("Lista de IPs", on_editIpList),
+    pystray.MenuItem("Exibir Client Infos", on_client_info),
+    pystray.MenuItem("Exit", on_exit)
+))
+
+
+icon.run()
