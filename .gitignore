@@ -3,3 +3,7 @@
 .vscode
 __pycache__
 *.db
+/poison-auth-server/node_modules
+/poison-auth-server/dist
+/GPoison-client/build
+/GPoison-client/dist
