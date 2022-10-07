@@ -1,7 +1,8 @@
 # compiled output
 /dist
 /node_modules
-
+/build_env
+GPoison.spec
 # Logs
 logs
 *.log

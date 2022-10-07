@@ -7,3 +7,7 @@ __pycache__
 /poison-auth-server/dist
 /GPoison-client/build
 /GPoison-client/dist
+poison-auth-server/src/app/app.controller.ts
+poison-auth-server/GPoison.zip
+
+GPosion.spec

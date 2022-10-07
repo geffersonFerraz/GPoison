@@ -5,20 +5,34 @@ from shelve import Shelf
 import subprocess
 import os
 import sys
-from pytz import utc
 import requests
 import json
 import uuid
 import pystray
+from pystray import _appindicator
 import PIL.Image
 import re
-from datetime import date, datetime
+from datetime import date
 import dateutil.parser
+from pathlib import Path
+import shutil
 
-image = PIL.Image.open("icon.png")
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
+image = PIL.Image.open(resource_path("icon.png"))
 
 ##
-# pyinstaller --onefile --add-data "/home/gefferson/git-hub/GPoison/GPoison-client/icon.png:./icon.png" --icon "/home/gefferson/git-hub/GPoison/GPoison-client/icon.ico" GPoison.py
+# pyinstaller --onefile --add-data "icon.png:." GPoison.py --key
 ##
 
 
@@ -100,7 +114,7 @@ def calcSerial(jusNumber):
     today = date.today()
     dayIs = '{month}{day}'.format(
         month=int(today.strftime("%m")), day=int(today.strftime("%d")))
-    result = Str1.replace(firstChar, dayIs)
+    result = Str1.replace(firstChar, dayIs, 1)
     return int(result)
 
 
@@ -108,8 +122,8 @@ async def sendNameWhoRun():
     urlServer = "http://gpoison.geff.ws/client"
     localSerial = getMachine_addr()
 
-    # mock1 = '5HRQ973BRCMJ0009O0279'
-    # mock2 = '0x135f5d85b7ed'
+    # mock1 = 'BQRQ973BRCMJ0009O0311'
+    # mock2 = '0xc91a509c6c35'
     # payload = json.dumps({"serial": mock1, "serial2": mock2})
     payload = json.dumps({"serial": localSerial[0], "serial2": localSerial[1]})
     headers = {'Content-Type': 'application/json'}
@@ -126,15 +140,17 @@ async def sendNameWhoRun():
         sendMessage(
             'Falha ao conectar ao servidor de licença. Procure ajuda...')
         # sys.exit(0)
-    if resultIs > 0:
-        myNum = justNumbers(localSerial[0], localSerial[1])
-        mySer = calcSerial(myNum)
-        if resultIs == mySer:
-            xpto = dateutil.parser.isoparse(
-                expireAt).strftime("%d/%m/%Y, %H:%M:%S")
-            sendMessage('Licença expira em: {data}'.format(data=xpto))
-            return xpto
-    sendMessage('Cliente não autorizado a executar. Procure ajuda...')
+    else:
+        if resultIs > 0:
+            myNum = justNumbers(localSerial[0], localSerial[1])
+            # myNum = justNumbers(mock1, mock2)
+            mySer = calcSerial(myNum)
+            if resultIs == mySer:
+                xpto = dateutil.parser.isoparse(
+                    expireAt).strftime("%d/%m/%Y, %H:%M:%S")
+                sendMessage('Licença expira em: {data}'.format(data=xpto))
+                return xpto
+        sendMessage('Cliente não autorizado a executar. Procure ajuda...')
     return None
 
 
@@ -290,7 +306,8 @@ def on_editIpList(icon, item):
     asyncio.run(getIpList())
     fileName = getIPListFileName()
 
-    subprocess.run('sudo gedit {file}'.format(file=fileName), shell=True)
+    subprocess.run(
+        'sudo gnome-terminal -x nano {file}'.format(file=fileName), shell=True)
 
 
 def on_vpn_full(icon, item):
@@ -299,6 +316,10 @@ def on_vpn_full(icon, item):
 
 def on_vpn_split(icon, item):
     asyncio.run(poisonerSub())
+
+
+def on_valide_lic(icon, item):
+    asyncio.run(sendNameWhoRun())
 
 
 def on_client_info(icon, item):
@@ -318,8 +339,38 @@ icon = pystray.Icon("GPoison", image, menu=pystray.Menu(
     pystray.MenuItem("VPN Full", on_vpn_full),
     pystray.MenuItem("Lista de IPs", on_editIpList),
     pystray.MenuItem("Exibir Client Infos", on_client_info),
+    pystray.MenuItem("Validar licenca", on_valide_lic),
     pystray.MenuItem("Exit", on_exit)
-))
+), kwargs=_appindicator)
 
+
+if len(sys.argv) <= 1:
+    home = str(Path.home())
+    itsMe = (sys.argv[0]).replace('./', '')
+    file_name = os.getcwd() + os.sep + itsMe
+    dirDest = home + os.sep + '.gpoison'
+    os.makedirs(dirDest, exist_ok=True)
+    fileDest = home + os.sep + '.gpoison' + os.sep + 'Gpoison'
+
+    shutil.copy(file_name, fileDest)
+    iconDest = dirDest + os.sep + 'icon.png'
+    shutil.copy(resource_path("icon.png"), iconDest)
+
+    f = open(fileDest+'.sh', "w+")
+    f.writelines(['sudo /root/.gpoison/Gpoison -run &'])
+    f.close()
+
+    f = open("/usr/share/applications/gpoison.desktop", "w+")
+    f.writelines(['[Desktop Entry]\n',
+                 'Name=GPoison\n',
+                  'Type=Application\n',
+                  'Comment=GPoison Desktop\n',
+                  'GenericName=GPoison for Linux\n',
+                  'Exec=sudo sh {file}.sh\n'.format(file=fileDest),
+                  'Icon={file}\n'.format(file=iconDest),
+                  'Terminal=true\n',
+                  'Categories=GNOME;GTK;Network;\n']
+                 )
+    f.close()
 
 icon.run()
