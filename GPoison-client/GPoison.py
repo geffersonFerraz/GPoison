@@ -329,7 +329,7 @@ def on_client_info(icon, item):
     xMessage = '{S1}'.format(S1=result)
     try:
         requests.post(
-            'https://api.telegram.org/bot5702731597:AAEdxNyojGJI4K7aFr6q8-Ns1wihF0gCvOU/sendMessage?chat_id=-1001851963351&text=Usuario: {msg}'.format(msg=xMessage))
+            'https://api.telegram.org/token-expiradoU/sendMessage?chat_id=-1001851963351&text=Usuario: {msg}'.format(msg=xMessage))
     except:
         err = 1
     sendMessage(xMessage)
