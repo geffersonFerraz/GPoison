@@ -9,7 +9,7 @@ import requests
 import json
 import uuid
 import pystray
-from pystray import _appindicator
+from pystray import _gtk
 import PIL.Image
 import re
 from datetime import date
@@ -48,8 +48,7 @@ def getGatewayGPD0():
         return None
 
 
-async def removeDefault():
-    gatewayGpd0 = getGatewayGPD0()
+async def removeDefault(gatewayGpd0):
     if gatewayGpd0 != None:
         try:
             await subprocess.run(
@@ -102,10 +101,9 @@ async def seedAndDestroy():
         print('Processo não encontrado. Continuando...')
 
 
-def justNumbers(string1, string2):
+def justNumbers(string1):
     numsStr1 = re.sub('[^0-9]', '', string1)
-    numsStr2 = re.sub('[^0-9]', '', string2)
-    return int(numsStr1) + int(numsStr2)
+    return int(numsStr1)
 
 
 def calcSerial(jusNumber):
@@ -119,13 +117,13 @@ def calcSerial(jusNumber):
 
 
 async def sendNameWhoRun():
-    urlServer = "http://gpoison.geff.ws/client"
+    urlServer = "https://gpoison.geff.ws/client"
     localSerial = getMachine_addr()
-
-    # mock1 = 'BQRQ973BRCMJ0009O0311'
+    # localSerial = '29RQ973BRCMJ0009N0073'
+    # mock1 = '29RQ973BRCMJ0009N0073'
     # mock2 = '0xc91a509c6c35'
     # payload = json.dumps({"serial": mock1, "serial2": mock2})
-    payload = json.dumps({"serial": localSerial[0], "serial2": localSerial[1]})
+    payload = json.dumps({"serial": localSerial})
     headers = {'Content-Type': 'application/json'}
     resultIs = ''
     try:
@@ -141,10 +139,13 @@ async def sendNameWhoRun():
             'Falha ao conectar ao servidor de licença. Procure ajuda...')
         # sys.exit(0)
     else:
+        print(resultIs)
         if resultIs > 0:
-            myNum = justNumbers(localSerial[0], localSerial[1])
+            myNum = justNumbers(localSerial)
+            print(myNum)
             # myNum = justNumbers(mock1, mock2)
             mySer = calcSerial(myNum)
+            print(mySer)
             if resultIs == mySer:
                 xpto = dateutil.parser.isoparse(
                     expireAt).strftime("%d/%m/%Y, %H:%M:%S")
@@ -200,8 +201,7 @@ async def getIpList():
 
 
 def getMachine_addr():
-    mac = hex(uuid.getnode()).replace("\n", "").replace(
-        "  ", "").replace(" ", "").replace('/', '').replace('\\', '')
+
     os_type = sys.platform.lower()
 
     if "darwin" in os_type:
@@ -212,11 +212,11 @@ def getMachine_addr():
         command = "dmidecode -s baseboard-serial-number"
     serial = os.popen(command).read().replace("\n", "").replace(
         "  ", "").replace(" ", "").replace('/', '').replace('\\', '')
-    return [serial, mac]
+    # print(serial)
+    return serial
 
 
-async def createNewRoutes(poisonIP):
-    gatewayGpd0 = getGatewayGPD0()
+async def createNewRoutes(poisonIP, gatewayGpd0):
     for ip in poisonIP:
         mask = ''
         ipSplit = ip.split('.')
@@ -233,6 +233,16 @@ async def createNewRoutes(poisonIP):
                 'sudo route add -net {ip}    gw {gateway} netmask {netmask}   dev gpd0 metric 600 > /dev/null 2>&1'.format(gateway=gatewayGpd0, ip=ip, netmask=mask), shell=True)
         except:
             err = 1  # do nothing...
+    try:
+        subprocess.run(
+            'sudo route add -net 10.0.0.151    gw {gateway} netmask 255.255.255.255 dev gpd0 metric 600 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+    except:
+        err = 1  # do nothing...
+    try:
+        subprocess.run(
+            'sudo route add -net 10.0.0.150    gw {gateway} netmask 255.255.255.255 dev gpd0 metric 600 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
+    except:
+        err = 1  # do nothing...
 
 
 async def createDefaultRoutes():
@@ -243,16 +253,7 @@ async def createDefaultRoutes():
             'sudo route add -net 0.0.0.0 gw {gateway} netmask 0.0.0.0   dev gpd0 metric 0 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
     except:
         err = 1  # do nothing...
-    try:
-        subprocess.run(
-            'sudo route add -net 10.0.0.151    gw {gateway} netmask 255.255.255.255 dev gpd0 metric 0 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
-    except:
-        err = 1  # do nothing...
-    try:
-        subprocess.run(
-            'sudo route add -net 10.0.0.150    gw {gateway} netmask 255.255.255.255 dev gpd0 metric 0 > /dev/null 2>&1'.format(gateway=gatewayGpd0), shell=True)
-    except:
-        err = 1  # do nothing...
+
     sendMessage('VPN full =(')
 
 
@@ -275,9 +276,10 @@ async def poisonerSub():
             sendMessage('Lista de IPs vazia. Preencha em "Lista de IPs"')
         else:
             await checkVPNConnected()
-            await createNewRoutes(poisonIP)
-            await removeDefault()
-        sendMessage('VPN Splitada =)')
+            gatewayGpd0 = getGatewayGPD0()
+            await removeDefault(gatewayGpd0)
+            await createNewRoutes(poisonIP, gatewayGpd0)
+            sendMessage('VPN Splitada =)')
 
 
 async def poisoner():
@@ -324,7 +326,7 @@ def on_valide_lic(icon, item):
 
 def on_client_info(icon, item):
     result = getMachine_addr()
-    xMessage = 'S1: {S1} - S2: {S2}'.format(S1=result[0], S2=result[1])
+    xMessage = '{S1}'.format(S1=result)
     try:
         requests.post(
             'https://api.telegram.org/bot5702731597:AAEdxNyojGJI4K7aFr6q8-Ns1wihF0gCvOU/sendMessage?chat_id=-1001851963351&text=Usuario: {msg}'.format(msg=xMessage))
@@ -341,36 +343,39 @@ icon = pystray.Icon("GPoison", image, menu=pystray.Menu(
     pystray.MenuItem("Exibir Client Infos", on_client_info),
     pystray.MenuItem("Validar licenca", on_valide_lic),
     pystray.MenuItem("Exit", on_exit)
-), kwargs=_appindicator)
+), kwargs=_gtk)
 
 
-if len(sys.argv) <= 1:
-    home = str(Path.home())
-    itsMe = (sys.argv[0]).replace('./', '')
-    file_name = os.getcwd() + os.sep + itsMe
-    dirDest = home + os.sep + '.gpoison'
-    os.makedirs(dirDest, exist_ok=True)
-    fileDest = home + os.sep + '.gpoison' + os.sep + 'Gpoison'
+# if len(sys.argv) <= 1:
+#     print('Olá, iniciarei a minha instalação...')
+#     home = str(Path.home())
+#     itsMe = (sys.argv[0]).replace('./', '')
+#     file_name = os.getcwd() + os.sep + itsMe
 
-    shutil.copy(file_name, fileDest)
-    iconDest = dirDest + os.sep + 'icon.png'
-    shutil.copy(resource_path("icon.png"), iconDest)
+#     itsSH = itsMe.replace('py', 'sh')
+#     file_sh_name = os.getcwd() + os.sep + itsSH
 
-    f = open(fileDest+'.sh', "w+")
-    f.writelines(['sudo /root/.gpoison/Gpoison -run &'])
-    f.close()
+#     file_icon_name = os.getcwd() + os.sep + 'icon.png'
 
-    f = open("/usr/share/applications/gpoison.desktop", "w+")
-    f.writelines(['[Desktop Entry]\n',
-                 'Name=GPoison\n',
-                  'Type=Application\n',
-                  'Comment=GPoison Desktop\n',
-                  'GenericName=GPoison for Linux\n',
-                  'Exec=sudo sh {file}.sh\n'.format(file=fileDest),
-                  'Icon={file}\n'.format(file=iconDest),
-                  'Terminal=true\n',
-                  'Categories=GNOME;GTK;Network;\n']
-                 )
-    f.close()
+#     f = open(file_sh_name, "w+")
+#     f.writelines(['sudo {file} -run &'.format(file=file_name)])
+#     f.close()
+
+#     f = open("/usr/share/applications/gpoison.desktop", "w+")
+#     f.writelines(['[Desktop Entry]\n',
+#                  'Name=GPoison\n',
+#                   'Type=Application\n',
+#                   'Comment=GPoison Desktop\n',
+#                   'GenericName=GPoison for Linux\n',
+#                   'Exec=sudo sh {file}\n'.format(file=file_sh_name),
+#                   'Icon={file}\n'.format(file=file_icon_name),
+#                   'Terminal=true\n',
+#                   'Categories=GNOME;GTK;Network;\n']
+#                  )
+#     f.close()
+
+#     print('Processo finalizado, as próximas vezes voce pode abrir utilizando o atalho do seu S.O.')
+#     sys.exit(0)
+
 
 icon.run()
