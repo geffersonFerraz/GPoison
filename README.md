@@ -1,27 +1,9 @@
-# GPoison
-Save when u want.
+Leia e interprete o código e seja feliz. 
 
-Run with python >= 3.10 
+Quer o compilado, só rodar e por a lista de IPS para tunelar? Manda o pix! inter@gefferson.com.br
+http://gpoison.geff.ws/
 
-$ python3 GPoison.py
-
-Add new ips to create a vpn route at object poisonTarget [], ex:
-
-```
-poisonTarget = ['35.0.0.0',
-                '10.0.0.0'
-                ]
-
-```
-
-Be happy!
-thnks @panngo
+[Kazam_screencast_00004.webm](https://user-images.githubusercontent.com/13826728/195624794-91b8e6a9-0fff-4d47-b86c-15203239b732.webm)
 
 
-para gerar binario: 
-
-```
-
- pyinstaller --onefile --add-data "/home/gefferson/git-hub/GPoison/icon.png:./icon.png" --icon "/home/gefferson/git-hub/GPoison/icon.ico" GPoison.py
-
-```
+#BEFREE #fucksociety
